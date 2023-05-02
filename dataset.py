@@ -1,13 +1,21 @@
 import json
-import torch
-from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 
 
 class Seq2SeqDataSet(Dataset):
-    def __init__(self, data_path, tokenizer, max_len, max_src_len, prompt_text):
+    def __init__(
+        self,
+        data_path,
+        tokenizer,
+        max_source_length,
+        max_target_length,
+        prompt_text_path,
+    ):
 
-        max_tgt_len = max_len - max_src_len - 3
+        with open(prompt_text_path, "r", encoding="utf8") as f:
+            prompt_text = f.read().strip()
+
+        max_length = max_source_length + max_target_length + 3
         self.all_data = []
         with open(data_path, "r", encoding="utf-8") as fh:
             for i, line in enumerate(fh):
@@ -15,12 +23,12 @@ class Seq2SeqDataSet(Dataset):
                 src_tokens = tokenizer.tokenize(sample["text"])
                 prompt_tokens = tokenizer.tokenize(prompt_text)
 
-                if len(src_tokens) > max_src_len - len(prompt_tokens):
-                    src_tokens = src_tokens[: max_src_len - len(prompt_tokens)]
+                if len(src_tokens) > max_source_length - len(prompt_tokens):
+                    src_tokens = src_tokens[: max_source_length - len(prompt_tokens)]
 
                 tgt_tokens = tokenizer.tokenize(sample["answer"])
-                if len(tgt_tokens) > max_tgt_len:
-                    tgt_tokens = tgt_tokens[:max_tgt_len]
+                if len(tgt_tokens) > max_target_length:
+                    tgt_tokens = tgt_tokens[:max_target_length]
                 tokens = (
                     prompt_tokens
                     + src_tokens
@@ -33,7 +41,7 @@ class Seq2SeqDataSet(Dataset):
                 mask_position = context_length - 1
                 labels = [-100] * context_length + input_ids[mask_position + 1 :]
 
-                pad_len = max_len - len(input_ids)
+                pad_len = max_length - len(input_ids)
                 input_ids = input_ids + [tokenizer.pad_token_id] * pad_len
                 labels = labels + [-100] * pad_len
 
@@ -51,16 +59,3 @@ class Seq2SeqDataSet(Dataset):
 
     def __getitem__(self, item):
         return self.all_data[item]
-
-
-def coll_fn(batch):
-    input_ids_list, labels_list = [], []
-    for instance in batch:
-        input_ids_list.append(torch.tensor(instance["input_ids"], dtype=torch.long))
-        labels_list.append(torch.tensor(instance["labels"], dtype=torch.long))
-    return {
-        "input_ids": pad_sequence(
-            input_ids_list, batch_first=True, padding_value=3
-        ),
-        "labels": pad_sequence(labels_list, batch_first=True, padding_value=3),
-    }
