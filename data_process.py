@@ -21,7 +21,7 @@ def format_data(path):
             answer = []
             try:
                 for event in example["event_list"]:
-                    event_type = f'{event["trigger"]}_{event["event_type"]}'
+                    event_type = f'{event["event_type"]}'
                     roles = [
                         f'{role["argument"]}_{role["role"]}'
                         for role in event["arguments"]

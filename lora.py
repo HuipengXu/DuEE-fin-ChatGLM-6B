@@ -19,7 +19,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from trainer_seq2seq import Seq2SeqTrainer
+from trainer_seq2seq import Seq2SeqTrainer, SavePeftModelCallback
 
 from tokenization_chatglm import ChatGLMTokenizer
 from modeling_chatglm import ChatGLMForConditionalGeneration
@@ -30,28 +30,6 @@ logger = logging.getLogger(__name__)
 from dataset import Seq2SeqDataSet
 
 DATA_PATH = "DuEE_fin"
-
-
-# def set_args():
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument(
-#         "--train_path", default=f"{DATA_PATH}/train.json", type=str, help=""
-#     )
-#     parser.add_argument(
-#         "--dev_path", default=f"{DATA_PATH}/dev.json", type=str, help=""
-#     )
-#     parser.add_argument("--model_dir", default="chatglm-6b", type=str, help="")
-#     parser.add_argument("--num_train_epochs", default=5, type=int, help="")
-#     parser.add_argument("--train_batch_size", default=2, type=int, help="")
-#     parser.add_argument("--gradient_accumulation_steps", default=1, type=int, help="")
-#     parser.add_argument("--output_dir", default="output", type=str, help="")
-#     parser.add_argument("--log_steps", type=int, default=10, help="")
-#     parser.add_argument("--max_len", type=int, default=2048, help="")
-#     parser.add_argument("--max_src_len", type=int, default=1024, help="")
-#     parser.add_argument("--local_rank", type=int, default=0, help="")
-#     parser.add_argument("--lora_r", type=int, default=8, help="")
-#     parser.add_argument("--prompt_text", type=str, default="", help="prompt length 796")
-#     return parser.parse_args()
 
 
 def main():
@@ -110,12 +88,12 @@ def main():
     config = LoraConfig(
         r=lora_args.lora_r,
         lora_alpha=lora_args.lora_alpha,
-        target_modules=['query_key_value'],
+        target_modules=["query_key_value"],
         lora_dropout=lora_args.lora_dropout,
         bias=lora_args.bias,
-        task_type='CAUSAL_LM',
+        task_type="CAUSAL_LM",
         inference_mode=False,
-        fan_in_fan_out=False
+        fan_in_fan_out=False,
     )
 
     model = get_peft_model(model, config)
@@ -174,6 +152,7 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         save_prefixencoder=model_args.pre_seq_len is not None,
+        callbacks=[SavePeftModelCallback],
     )
 
     # Training
@@ -201,16 +180,9 @@ def main():
         trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate(
-            metric_key_prefix="eval",
-            do_sample=True,
-            top_p=0.7,
-            max_length=512,
-            temperature=0.95,
-        )
+        metrics = trainer.evaluate(metric_key_prefix="eval")
         max_eval_samples = (
             data_args.max_eval_samples
             if data_args.max_eval_samples is not None
@@ -220,36 +192,6 @@ def main():
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-
-    # if training_args.do_predict:
-    #     logger.info("*** Predict ***")
-
-    #     predict_results = trainer.predict(predict_dataset, metric_key_prefix="predict", max_length=512, do_sample=True, top_p=0.7, temperature=0.95)
-    #     metrics = predict_results.metrics
-    #     max_predict_samples = (
-    #         data_args.max_predict_samples if data_args.max_predict_samples is not None else len(predict_dataset)
-    #     )
-    #     metrics["predict_samples"] = min(max_predict_samples, len(predict_dataset))
-
-    #     trainer.log_metrics("predict", metrics)
-    #     trainer.save_metrics("predict", metrics)
-
-    #     if trainer.is_world_process_zero():
-    #         if training_args.predict_with_generate:
-    #             predictions = tokenizer.batch_decode(
-    #                 predict_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
-    #             )
-    #             predictions = [pred.strip() for pred in predictions]
-    #             labels = tokenizer.batch_decode(
-    #                 predict_results.label_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
-    #             )
-    #             labels = [label.strip() for label in labels]
-    #             output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
-    #             with open(output_prediction_file, "w", encoding="utf-8") as writer:
-    #                 for p, l in zip(predictions, labels):
-    #                     res = json.dumps({"labels": l, "predict": p}, ensure_ascii=False)
-    #                     writer.write(f"{res}\n")
-    return results
 
 
 if __name__ == "__main__":
