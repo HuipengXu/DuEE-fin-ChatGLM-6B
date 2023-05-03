@@ -4,10 +4,6 @@ import sys
 import json
 
 import numpy as np
-from datasets import load_dataset
-import jieba
-from rouge_chinese import Rouge
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 import torch
 
 from peft import get_peft_model, LoraConfig
@@ -107,7 +103,7 @@ def main():
     set_seed(training_args.seed)
 
     model = ChatGLMForConditionalGeneration.from_pretrained(
-        model_args.model_name_or_path
+        model_args.model_name_or_path, empty_init=False
     )
     tokenizer = ChatGLMTokenizer.from_pretrained(model_args.model_name_or_path)
 
@@ -117,8 +113,9 @@ def main():
         target_modules=['query_key_value'],
         lora_dropout=lora_args.lora_dropout,
         bias=lora_args.bias,
-        task_type=lora_args.task_type,
+        task_type='CAUSAL_LM',
         inference_mode=False,
+        fan_in_fan_out=False
     )
 
     model = get_peft_model(model, config)
